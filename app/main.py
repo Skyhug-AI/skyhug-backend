@@ -2,10 +2,11 @@ import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from .routers import chat, summarizer, tts
-from .services.elevenlabs import warmup_elevenlabs_pool
-from .services.openai_service import warmup_openai_models
 from dependency_injector.wiring import inject, Provide
 from app.services.openai_service import OpenAIService
+from app.services.elevenlabs_service import ElevenLabsService
+from app.services.summarizer_service import SummarizerService
+
 
 from app.config import config
 from containers import Container
@@ -28,19 +29,20 @@ app.include_router(tts.router,        prefix="", tags=["tts"])
 @app.on_event("startup")
 @inject
 async def startup_event(
-    eleven_sess=Provide[Container.elevenlabs_session],
-    openai_client=Provide[Container.openai_client],
     cfg=Provide[Container.config],
     openai_service: OpenAIService = Provide[Container.openai_service],
+    elevenlabs_service: ElevenLabsService = Provide[Container.elevenlabs_service],
+    summarizer_service: SummarizerService = Provide[Container.summarizer_service],
 ):
     # 1) init & wire your DI container
     container.init_resources()
     container.wire(packages=["app.routers", "app.services"])
     app.state.container = container
 
-    # 2) warm up the default ElevenLabs voice & OpenAI
-    warmup_elevenlabs_pool(eleven_sess, cfg.ELEVENLABS_VOICE_ID)
+    # openai_svc: OpenAIService = container.openai_service()
+    elevenlabs_service.warmup_elevenlabs_pool()
     openai_service.warmup_models()
+    summarizer_service.close_inactive_conversations()
 
 @app.on_event("shutdown")
 async def shutdown_event():

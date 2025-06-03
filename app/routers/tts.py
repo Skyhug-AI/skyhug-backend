@@ -2,7 +2,8 @@ from fastapi import APIRouter, Depends
 from dependency_injector.wiring import inject, Provide
 
 from app.containers import Container
-from app.services.tts_service import TTSService
+from app.services.elevenlabs_service import ElevenLabsService
+
 
 router = APIRouter()
 
@@ -12,7 +13,6 @@ router = APIRouter()
 async def tts_stream(
     message_id: str,
     snippet: int = 0,
-    tts: TTSService = Depends(Provide[Container.tts_service]),
-    cfg=Depends(Provide[Container.config]),
+    elevenlabs_service: ElevenLabsService = Depends(Provide[Container.elevenlabs_service]),
 ):
-    return tts.stream_snippet(message_id, snippet, cfg.ELEVENLABS_VOICE_ID)
+    return elevenlabs_service.fetch_and_stream(message_id, snippet)

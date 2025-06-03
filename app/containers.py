@@ -6,11 +6,13 @@ from supabase._async.client import create_client as create_supabase_async
 from openai import OpenAI
 from config import config
 from app.repositories.messages import MessageRepository
-from app.services.tts_service import TTSService
+from app.repositories.conversations import ConversationRepository
+from app.repositories.therapists import TherapistRepository
 from app.services.supabase_sync import SupabaseSyncClient
 from app.services.supabase_async import SupabaseAsyncClient
 from app.services.openai_service import OpenAIService
 from app.services.elevenlabs_service import ElevenLabsService
+from app.services.summarizer_service import SummarizerService
 
 
 class Container(containers.DeclarativeContainer):
@@ -20,9 +22,9 @@ class Container(containers.DeclarativeContainer):
     # Repositories
     message_repository      = providers.Factory(MessageRepository)
     conversation_repository = providers.Factory(ConversationRepository)
+    therapist_repository = providers.Factory(TherapistRepository)
 
     # Services
-    tts_service = providers.Factory(TTSService)
 
     supabase_sync = providers.Singleton(
         create_supabase_sync,
@@ -68,7 +70,16 @@ class Container(containers.DeclarativeContainer):
 
     elevenlabs_service = providers.Factory(
         ElevenLabsService,
+        message_repo = message_repository,
+        conversation_repo = conversation_repository,
+        therapist_repo = therapist_repository,
         supabase=     supabase_sync,
         session=     elevenlabs_session,
         default_voice_id=config.provided.ELEVENLABS_VOICE_ID,
+    )
+
+    summarizer_service = providers.Factory(
+        SummarizerService,
+        supabase=supabase_sync_client,
+        openai_service=openai_service,
     )
