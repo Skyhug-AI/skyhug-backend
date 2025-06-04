@@ -1,20 +1,19 @@
 from dataclasses import dataclass
 from typing import Optional
 from fastapi import HTTPException
-from app.utils.regex_utils import sanitize_text, split_sentences
-from app.services.supabase_sync import SupabaseSyncClient
+from supabase import Client
 import requests, re
 from fastapi.responses import StreamingResponse
-from app.repositories.messages import MessageRepository
-from app.repositories.conversations import ConversationRepository
-from app.repositories.therapists import TherapistRepository
+from repositories.messages import MessageRepository
+from repositories.conversations import ConversationRepository
+from repositories.therapists import TherapistRepository
 
 @dataclass
 class ElevenLabsService:
     message_repo: MessageRepository
     conversation_repo: ConversationRepository
     therapist_repo: TherapistRepository
-    supabase: SupabaseSyncClient
+    supabase_sync: Client
     elevenlabs_session: requests.Session
     default_voice_id: str
 

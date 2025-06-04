@@ -1,19 +1,18 @@
 from dataclasses import dataclass
 import json
-import threading
 import asyncio
 from datetime import datetime, timezone
 
 from openai import OpenAI
 from realtime import RealtimeSubscribeStates
 
-from app.services.supabase_sync import SupabaseSyncClient
-from app.services.supabase_async import SupabaseAsyncClient
-from app.repositories.messages import MessageRepository
-from app.repositories.conversations import ConversationRepository
-from app.repositories.therapists import TherapistRepository
+from supabase import Client
+from supabase._async.client import AsyncClient
+from repositories.messages import MessageRepository
+from repositories.conversations import ConversationRepository
+from repositories.therapists import TherapistRepository
 
-from app.constants.prompts import (
+from constants.prompts import (
     DEFAULT_SYSTEM_PROMPT,
     SKY_EXAMPLE_DIALOG,
     PERSONA_TEMPLATE,
@@ -22,8 +21,8 @@ from app.constants.prompts import (
 
 @dataclass
 class ChatService:
-    supabase: SupabaseSyncClient
-    supabase_async: SupabaseAsyncClient
+    supabase_sync: Client
+    supabase_async: AsyncClient
     openai_client: OpenAI
     message_repo: MessageRepository
     conversation_repo: ConversationRepository
@@ -127,7 +126,7 @@ class ChatService:
         if msg.get("ai_started"):
             return
 
-        self.supabase.table("messages") \
+        self.supabase_sync.table("messages") \
             .update({"ai_started": True}) \
             .eq("id", msg["id"]) \
             .execute()
@@ -170,7 +169,7 @@ class ChatService:
             # 5) generate & store assistant reply
             if not voice_mode:
                 # —— CHAT MODE: stream deltas into a new “assistant” row ——
-                insert_resp = self.supabase.table("messages").insert({
+                insert_resp = self.supabase_sync.table("messages").insert({
                     "conversation_id": msg["conversation_id"],
                     "sender_role":     "assistant",
                     "assistant_text":  "",
@@ -198,7 +197,7 @@ class ChatService:
                         finish_reason = chunk.choices[0].finish_reason
 
                     # write partial text back
-                    self.supabase.table("messages") \
+                    self.supabase_sync.table("messages") \
                         .update({"assistant_text": accumulated}) \
                         .eq("id", mid) \
                         .execute()
@@ -213,13 +212,13 @@ class ChatService:
                     )
                     extra = cont.choices[0].message.content or ""
                     accumulated = accumulated.rstrip() + " " + extra.strip()
-                    self.supabase.table("messages") \
+                    self.supabase_sync.table("messages") \
                         .update({"assistant_text": accumulated}) \
                         .eq("id", mid) \
                         .execute()
 
                 # mark AI done
-                self.supabase.table("messages") \
+                self.supabase_sync.table("messages") \
                     .update({"ai_status": "done"}) \
                     .eq("id", mid) \
                     .execute()
@@ -260,7 +259,7 @@ class ChatService:
                         content = content.rstrip() + " " + extra.lstrip()
 
                 # insert the row with full assistant_text
-                insert_resp = self.supabase.table("messages").insert({
+                insert_resp = self.supabase_sync.table("messages").insert({
                     "conversation_id": msg["conversation_id"],
                     "sender_role":     "assistant",
                     "assistant_text":  content,
@@ -273,18 +272,18 @@ class ChatService:
                 # seed snippet_url
                 snippet_url = f"/tts-stream/{mid}?snippet=0"
                 try:
-                    self.supabase.table("messages") \
+                    self.supabase_sync.table("messages") \
                         .update({"snippet_url": snippet_url}) \
                         .eq("id", mid) \
                         .execute()
                 except Exception:
-                    self.supabase.table("messages") \
+                    self.supabase_sync.table("messages") \
                         .update({"tts_status": "error"}) \
                         .eq("id", mid) \
                         .execute()
 
             # 6) mark the original user message AI‐done
-            self.supabase.table("messages") \
+            self.supabase_sync.table("messages") \
                 .update({"ai_status": "done"}) \
                 .eq("id", msg["id"]) \
                 .execute()
@@ -292,12 +291,12 @@ class ChatService:
             print(f"✅ Assistant response created for message {msg['id']}")
         except Exception as e:
             print(f"❌ AI error for {msg['id']}: {e}")
-            self.supabase.table("messages") \
+            self.supabase_sync.table("messages") \
                 .update({"ai_status": "error"}) \
                 .eq("id", msg["id"]) \
                 .execute()
 
-    async def start_realtime(self, supabase_url: str, service_role_key: str) -> None:
+    async def start_realtime(self) -> None:
         """
         Kick off a Realtime subscription to “messages” table. Whenever
         a new user‐message row arrives (or gets edited), call handle_ai_record.
@@ -346,10 +345,11 @@ class ChatService:
         Fetch rows matching conds from the given table. If table == "messages",
         only return any that were created after self.START_TS.
         """
-        q = self.supabase.table(table).select("*").match(conds)
+        q = self.supabase_sync.table(table).select("*").match(conds)
         if table == "messages":
             q = q.gt("created_at", self.START_TS)
         return q.execute().data or []
+
 
     # def schedule_cleanup(self, interval_hours: int = 1) -> None:
     #     """

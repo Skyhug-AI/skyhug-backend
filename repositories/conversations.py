@@ -1,10 +1,11 @@
 from dataclasses import dataclass
-from app.services.supabase_sync import SupabaseSyncClient
+from supabase import Client
+from typing import Optional
 
 
 @dataclass
 class ConversationRepository:
-    supabase_sync_client: SupabaseSyncClient
+    supabase_sync_client: Client
 
     def fetch_voice_info(self, conversation_id: str) -> dict:
         """
@@ -42,7 +43,7 @@ class ConversationRepository:
             .eq("id", conversation_id) \
             .execute()
 
-    def fetch_stale_conversation_ids(self, cutoff_iso: str) -> List[str]:
+    def fetch_stale_conversation_ids(self, cutoff_iso: str) -> list[str]:
             """
             Returns a list of conversation IDs where ended=False and updated_at < cutoff_iso.
             """

@@ -1,14 +1,16 @@
 import io
 from dataclasses import dataclass
 from openai import OpenAI
-from app.services.supabase_sync import SupabaseSyncClient
+from supabase import Client
+from datetime import datetime, timezone
 import requests
 
 @dataclass
 class WhisperService:
-    supabase: SupabaseSyncClient
+    supabase_sync: Client
     openai_client: OpenAI
     elevenlabs_session: requests.Session
+    START_TS: str = datetime.now(timezone.utc).isoformat()
 
     def download_audio(self, path: str, bucket: str = "raw-audio") -> bytes:
         """
@@ -42,16 +44,25 @@ class WhisperService:
                 model="whisper-1",
                 file=io.BytesIO(audio_bytes),
             )
-            self.supabase.update_status(
-                "messages",
-                message_id,
-                {"transcription": resp.text, "transcription_status": "done"}
-            )
+            self.supabase_sync \
+            .table("messages") \
+            .update({"transcription": resp.text, "transcription_status": "done"}) \
+            .eq("id", message_id) \
+            .execute()
             print(f"✅ Transcribed {message_id}: “{resp.text[:30]}…”")
         except Exception as e:
-            self.supabase.update_status(
-                "messages",
-                message_id,
-                {"transcription_status": "error"}
-            )
+            self.supabase_sync \
+                .table("messages") \
+                .update({"transcription": resp.text, "transcription_status": "done"}) \
+                .eq("id", message_id) \
+                .execute()
             print(f"❌ Transcription error for {message_id}:", e)
+
+    def fetch_pending(self, table: str, **conds) -> list[dict]:
+        """
+        Exactly the old helper: match conds; if table == "messages", also restrict created_at > START_TS
+        """
+        q = self.supabase_sync.table(table).select("*").match(conds)
+        if table == "messages":
+            q = q.gt("created_at", self.START_TS)
+        return q.execute().data or []

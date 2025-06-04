@@ -2,8 +2,8 @@ from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from dependency_injector.wiring import Provide, inject
 
-from app.containers import Container
-from app.services.summarizer_service import SummarizerService
+from containers import Container
+from services.summarizer_service import SummarizerService
 
 router = APIRouter(tags=["summarizer"])
 

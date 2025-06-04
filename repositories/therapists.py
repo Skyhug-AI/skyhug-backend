@@ -1,10 +1,11 @@
 from dataclasses import dataclass
-from app.services.supabase_sync import SupabaseSyncClient
+from supabase import Client
+from typing import Any
 
 
 @dataclass
 class TherapistRepository:
-    supabase_sync_client: SupabaseSyncClient
+    supabase_sync_client: Client
 
     def fetch_voice_id(self, therapist_id: str) -> str:
         """
@@ -23,7 +24,7 @@ class TherapistRepository:
         return row.get("elevenlabs_voice_id", "")
 
 
-    def fetch_therapist_persona(self, therapist_id: str) -> Dict[str, Any]:
+    def fetch_therapist_persona(self, therapist_id: str) -> dict[str, Any]:
         """
         Returns a dict with keys:
           "system_prompt", "name", "description", "bio",

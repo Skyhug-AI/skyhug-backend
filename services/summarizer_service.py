@@ -1,14 +1,14 @@
 from dataclasses import dataclass
 from datetime import datetime, timezone, timedelta
-from app.services.supabase_sync import SupabaseSyncClient
-from app.services.openai_service import OpenAIService
-from app.repositories.messages import MessageRepository
-from app.repositories.conversations import ConversationRepository
+from supabase import Client
+from services.openai_service import OpenAIService
+from repositories.messages import MessageRepository
+from repositories.conversations import ConversationRepository
 import threading
 
 @dataclass
 class SummarizerService:
-    supabase: SupabaseSyncClient
+    supabase_sync: Client
     openai_service: OpenAIService
     message_repo: MessageRepository
     conversation_repo: ConversationRepository

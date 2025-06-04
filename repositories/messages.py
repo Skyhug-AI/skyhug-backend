@@ -1,12 +1,9 @@
-from dependency_injector.wiring import Provide, inject
-from app.containers import Container
-from supabase import Client
 from dataclasses import dataclass
-from app.services.supabase_sync import SupabaseSyncClient
+from supabase import Client
 
 @dataclass
 class MessageRepository:
-    supabase_sync_client: SupabaseSyncClient
+    supabase_sync_client: Client
 
     def fetch_text(self, message_id: str) -> dict:
         row = (
@@ -39,7 +36,7 @@ class MessageRepository:
         )
         return history
 
-    def fetch_history_for_conversation(self, conversation_id: str) -> List[Dict]:
+    def fetch_history_for_conversation(self, conversation_id: str) -> list[dict]:
         """
         Returns every non‐invalidated message row for a given conversation_id,
         ordered by created_at. Each row includes sender_role, transcription,

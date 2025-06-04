@@ -1,8 +1,8 @@
 from fastapi import APIRouter, Depends
 from dependency_injector.wiring import inject, Provide
 
-from app.containers import Container
-from app.services.elevenlabs_service import ElevenLabsService
+from containers import Container
+from services.elevenlabs_service import ElevenLabsService
 
 
 router = APIRouter()
