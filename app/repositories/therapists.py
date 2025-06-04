@@ -21,3 +21,24 @@ class TherapistRepository:
                 .data
         ) or {}
         return row.get("elevenlabs_voice_id", "")
+
+
+    def fetch_therapist_persona(self, therapist_id: str) -> Dict[str, Any]:
+        """
+        Returns a dict with keys:
+          "system_prompt", "name", "description", "bio",
+          "approach", "session_structure", "specialties"
+        for the given therapist_id, or an empty dict if none exists.
+        """
+        row = (
+            self.supabase_sync_client
+                .table("therapists")
+                .select(
+                    "system_prompt, name, description, bio, approach, session_structure, specialties"
+                )
+                .eq("id", therapist_id)
+                .single()
+                .execute()
+                .data
+        ) or {}
+        return row

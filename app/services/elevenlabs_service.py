@@ -1,4 +1,3 @@
-# app/services/elevenlabs_service.py
 from dataclasses import dataclass
 from typing import Optional
 from fastapi import HTTPException
@@ -116,17 +115,3 @@ class ElevenLabsService:
             )
             upstream.raise_for_status()
             return upstream.iter_content(chunk_size=4096)
-
-    def download_audio(self, path: str, bucket: str = "raw-audio") -> bytes:
-        """
-        Given a Supabase storage path, generate a signed URL and fetch the audio bytes.
-        """
-        signed = (
-            self.supabase
-            .storage
-            .from_(bucket)
-            .create_signed_url(path, 60)["signedURL"]
-        )
-        resp = self.elevenlabs_session.get(signed, timeout=5)
-        resp.raise_for_status()
-        return resp.content

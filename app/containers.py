@@ -1,4 +1,3 @@
-import boto3
 import requests
 from dependency_injector import containers, providers
 from supabase import create_client as create_supabase_sync
@@ -13,7 +12,8 @@ from app.services.supabase_async import SupabaseAsyncClient
 from app.services.openai_service import OpenAIService
 from app.services.elevenlabs_service import ElevenLabsService
 from app.services.summarizer_service import SummarizerService
-
+from app.services.chat_service import ChatService
+from app.services.whisper_service import WhisperService
 
 class Container(containers.DeclarativeContainer):
 
@@ -25,7 +25,6 @@ class Container(containers.DeclarativeContainer):
     therapist_repository = providers.Factory(TherapistRepository)
 
     # Services
-
     supabase_sync = providers.Singleton(
         create_supabase_sync,
         config.provided.SUPABASE_URL,
@@ -82,4 +81,23 @@ class Container(containers.DeclarativeContainer):
         SummarizerService,
         supabase=supabase_sync_client,
         openai_service=openai_service,
+        message_repo=message_repository,
+        conversation_repo=conversation_repository,
+    )
+
+    chat_service = providers.Factory(
+        ChatService,
+        supabase_sync_client,
+        supabase_async_client,
+        openai_client, # change to open ai service
+        message_repository,
+        conversation_repository,
+        therapist_repository
+    )
+
+    whisper_service = providers.Factory(
+       WhisperService,
+       supabase_sync_client,
+       openai_client,
+       elevenlabs_session,
     )

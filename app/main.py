@@ -42,7 +42,8 @@ async def startup_event(
     # openai_svc: OpenAIService = container.openai_service()
     elevenlabs_service.warmup_elevenlabs_pool()
     openai_service.warmup_models()
-    summarizer_service.close_inactive_conversations()
+    summarizer_service.schedule_cleanup(interval_hours=1)
+    # summarizer_service.close_inactive_conversations()
 
 @app.on_event("shutdown")
 async def shutdown_event():

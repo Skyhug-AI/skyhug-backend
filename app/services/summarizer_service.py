@@ -2,12 +2,16 @@ from dataclasses import dataclass
 from datetime import datetime, timezone, timedelta
 from app.services.supabase_sync import SupabaseSyncClient
 from app.services.openai_service import OpenAIService
-
+from app.repositories.messages import MessageRepository
+from app.repositories.conversations import ConversationRepository
+import threading
 
 @dataclass
 class SummarizerService:
     supabase: SupabaseSyncClient
     openai_service: OpenAIService
+    message_repo: MessageRepository
+    conversation_repo: ConversationRepository
 
     def summarize_and_store(self, conversation_id: str) -> None:
         """
@@ -15,16 +19,7 @@ class SummarizerService:
         2) If there are ≥4 assistant replies, ask OpenAI for a short summary.
         3) Store that summary in `conversations.memory_summary`.
         """
-        history = (
-            self.supabase
-                .table("messages")
-                .select("sender_role, transcription, assistant_text")
-                .eq("conversation_id", conversation_id)
-                .order("created_at")
-                .execute()
-                .data
-            or []
-        )
+        history = self.message_repo.fetch_all_history_for_conversation(conversation_id)
 
         # 2) require at least 4 assistant replies
         assistant_count = sum(1 for m in history if m["sender_role"] == "assistant")
@@ -56,10 +51,7 @@ class SummarizerService:
         summary = raw.rstrip(".!?,;").strip()
 
         # 5) store it
-        self.supabase.table("conversations") \
-            .update({"memory_summary": summary}) \
-            .eq("id", conversation_id) \
-            .execute()
+        self.conversation_repo.update_summary(conversation_id, summary)
         print(f"🧠 Stored memory for conv {conversation_id}: {summary}")
 
     def close_inactive_conversations(self, interval_hours: int = 1) -> None:
@@ -72,24 +64,26 @@ class SummarizerService:
         print("⏰ Checking for inactive conversations...")
 
         # 1) find only active convs that have gone quiet for >1h
-        stale = (
-            self.supabase
-                .table("conversations")
-                .select("id")
-                .eq("ended", False)
-                .lt("updated_at", cutoff.isoformat())
-                .execute()
-                .data
-            or []
-        )
+        cutoff_iso = cutoff.isoformat()
+        stale_ids = self.conversation_repo.fetch_stale_conversation_ids(cutoff_iso)
 
-        for record in stale:
-            conv_id = record["id"]
-            # summarize if needed
+        for conv_id in stale_ids:
             self.summarize_and_store(conv_id)
-            # mark ended
-            self.supabase \
-                .table("conversations") \
-                .update({"ended": True}) \
-                .eq("id", conv_id) \
-                .execute()
+            self.conversation_repo.mark_ended(conv_id)
+
+    def schedule_cleanup(self, interval_hours: int = 1) -> None:
+        """
+        Kick off `close_inactive_conversations()` immediately, then
+        schedule it to run again every `interval_hours` hours.
+        """
+        def _job():
+            try:
+                self.close_inactive_conversations(interval_hours=interval_hours)
+            except Exception:
+                # swallow exceptions so the Timer loop does not die
+                pass
+            # schedule next run
+            threading.Timer(interval_hours * 3600, _job).start()
+
+        # run for the first time right away
+        _job()
