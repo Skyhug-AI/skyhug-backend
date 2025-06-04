@@ -135,7 +135,7 @@ class ChatService:
         try:
             # 2) figure out if voice_mode is on
             conv_row = (
-                self.supabase
+                self.supabase_sync
                 .table("conversations")
                 .select("voice_enabled")
                 .eq("id", msg["conversation_id"])

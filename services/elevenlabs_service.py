@@ -74,7 +74,7 @@ class ElevenLabsService:
         else:
             voice_id = self.default_voice_id
 
-        chunk_generator = self.stream_tts_snippet(piece, voice_id=voice_id)
+        chunk_generator = self.stream_tts_snippet(piece, custom_voice_id=voice_id)
 
         return StreamingResponse(
             chunk_generator,
