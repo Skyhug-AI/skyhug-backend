@@ -11,6 +11,8 @@ from supabase._async.client import AsyncClient
 from repositories.messages import MessageRepository
 from repositories.conversations import ConversationRepository
 from repositories.therapists import TherapistRepository
+from repositories.user_profiles import UserProfileRepository
+from constants.prompts import PROFILE_PROMPT_TEMPLATE
 
 from constants.prompts import (
     DEFAULT_SYSTEM_PROMPT,
@@ -27,6 +29,7 @@ class ChatService:
     message_repo: MessageRepository
     conversation_repo: ConversationRepository
     therapist_repo: TherapistRepository
+    user_profile_repo: UserProfileRepository
     START_TS: str = datetime.now(timezone.utc).isoformat()
     MAX_HISTORY: int = 10
 
@@ -74,6 +77,28 @@ class ChatService:
             )
         else:
             system_prompt = DEFAULT_SYSTEM_PROMPT
+
+               # 4a) fetch user profile and inject if it exists
+        #    we assume `conversations` row also has `patient_id`
+        conv_info = self.conversation_repo.fetch_voice_info(conv_id)
+        patient_id = conv_info.get("patient_id")
+        if patient_id:
+            profile = self.user_profile_repo.fetch_profile(patient_id)
+            if profile:
+                # render only non‐empty fields
+                details = []
+                for key, val in profile.items():
+                    if val:
+                        label = key.replace("_", " ").capitalize()
+                        # arrays → comma list
+                        if isinstance(val, list):
+                            val = ", ".join(val)
+                        details.append(f"{label}: {val}")
+                profile_str = "\n".join(details)
+                # append to system prompt
+                system_prompt += "\n\n" + PROFILE_PROMPT_TEMPLATE.format(
+                    profile_details=profile_str
+                )    
 
         # 5) build initial messages
         messages: list[dict] = [{"role": "system", "content": system_prompt}] + SKY_EXAMPLE_DIALOG

@@ -26,6 +26,11 @@ SKY_EXAMPLE_DIALOG = [
     {"role": "assistant", "content": "That sounds so uncomfortable. Feeling that kind of pressure in social situations can be really overwhelming. You're not alone in this — many people find those moments incredibly hard to manage. What do you think makes those moments feel especially intense for you?"}
 ]
 
+PROFILE_PROMPT_TEMPLATE = """
+Here is some background on the user that you may reference for context when it’s relevant:
+{profile_details}
+""".strip()
+
 PERSONA_TEMPLATE = """
 You are {name}, {description}.
 {bio}

@@ -7,6 +7,7 @@ from config import config
 from repositories.messages import MessageRepository
 from repositories.conversations import ConversationRepository
 from repositories.therapists import TherapistRepository
+from repositories.user_profiles import UserProfileRepository
 
 
 from services.openai_service import OpenAIService
@@ -94,7 +95,8 @@ class Container(containers.DeclarativeContainer):
         openai_client=openai_client,
         message_repo=message_repository,
         conversation_repo=conversation_repository,
-        therapist_repo=therapist_repository
+        therapist_repo=therapist_repository,
+        user_profile_repo=UserProfileRepository(sync_client),
     )
 
     whisper_service = providers.Factory(
