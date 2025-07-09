@@ -101,7 +101,7 @@ class Container(containers.DeclarativeContainer):
         message_repo=message_repository,
         conversation_repo=conversation_repository,
         therapist_repo=therapist_repository,
-        user_profile_repo=UserProfileRepository(user_profile_repository),
+        user_profile_repo=user_profile_repository,
     )
 
     whisper_service = providers.Factory(

@@ -2,9 +2,11 @@ from dataclasses import dataclass
 import json
 import asyncio
 from datetime import datetime, timezone
-
+import re
 from openai import OpenAI
 from realtime import RealtimeSubscribeStates
+from collections import defaultdict
+from dataclasses import field
 
 from supabase import Client
 from supabase._async.client import AsyncClient
@@ -33,6 +35,15 @@ class ChatService:
     START_TS: str = datetime.now(timezone.utc).isoformat()
     MAX_HISTORY: int = 10
 
+    _profile_injected_sessions: set[str] = field(default_factory=set, init=False)
+    _reminded_fields: dict[str, set[str]] = field(default_factory=lambda: defaultdict(set), init=False)
+    # define which keywords map to which profile fields
+    _keyword_map: dict[str, list[str]] = field(default_factory=lambda: {
+        "career": ["job", "career", "work", "office"],
+        "self_diagnosed_issues": ["anxiety", "depression", "ptsd", "panic", "stress"],
+        "topics_on_mind": ["mindful", "mind", "think", "ponder", "topic", "interest", "anxious"],
+    }, init=False)
+
     def build_chat_payload(self, conv_id: str, voice_mode: bool = False) -> list[dict]:
         """
         1) Load memory_summary (and clear “needs_resummarization” if flagged)
@@ -56,11 +67,7 @@ class ChatService:
 
         # fetch which therapist this convo is using
         therapist_id = self.conversation_repo.fetch_therapist_id(conv_id)
-
-        if therapist_id:
-            trow = self.therapist_repo.fetch_therapist_persona(therapist_id)
-        else:
-            trow = {}
+        trow = self.therapist_repo.fetch_therapist_persona(therapist_id) if therapist_id else {}
 
         # 4) pick which system_prompt to use
         if trow.get("system_prompt"):
@@ -78,12 +85,20 @@ class ChatService:
         else:
             system_prompt = DEFAULT_SYSTEM_PROMPT
 
-               # 4a) fetch user profile and inject if it exists
-        #    we assume `conversations` row also has `patient_id`
-        conv_info = self.conversation_repo.fetch_voice_info(conv_id)
-        patient_id = conv_info.get("patient_id")
-        if patient_id:
+        # ─── 4a) inject profile ONCE at session start ────────────────────────────
+        row = self.supabase_sync.table("conversations") \
+            .select("patient_id") \
+            .eq("id", conv_id) \
+            .single() \
+            .execute()
+        patient_id = row.data.get("patient_id") if row.data else None
+        print(f"🛠️ DEBUG fetched patient_id={patient_id}")
+
+        patient_id = (row.data or {}).get("patient_id")
+
+        if patient_id and conv_id not in self._profile_injected_sessions:
             profile = self.user_profile_repo.fetch_profile(patient_id)
+            print(f"🛠️ DEBUG fetched profile: {profile}")
             if profile:
                 # render only non‐empty fields
                 details = []
@@ -99,6 +114,8 @@ class ChatService:
                 system_prompt += "\n\n" + PROFILE_PROMPT_TEMPLATE.format(
                     profile_details=profile_str
                 )    
+                print("🔍 [debug] profile injected for session", conv_id)
+                self._profile_injected_sessions.add(conv_id)
 
         # 5) build initial messages
         messages: list[dict] = [{"role": "system", "content": system_prompt}] + SKY_EXAMPLE_DIALOG
@@ -134,6 +151,47 @@ class ChatService:
             ] + turns[-self.MAX_HISTORY:]
         else:
             messages += turns
+        
+        # ─── 5b) keyword-triggered reminders ───────────────────────────────
+        # look at the last user message (if any)
+        if conv_id in self._profile_injected_sessions and history:
+            print("🔍 [debug] entering drift logic for", conv_id)
+            last = history[-1]
+            if last["sender_role"] == "user":
+                user_text = (last.get("transcription") or "").lower()
+                # reuse same fetched profile
+                profile = self.user_profile_repo.fetch_profile(patient_id)
+                for field, keywords in self._keyword_map.items():
+                    if (
+                        field not in self._reminded_fields[conv_id]
+                        and any(kw in user_text for kw in keywords)
+                        and profile.get(field)
+                    ):
+                        reminder = f"Reminder: user’s {field.replace('_',' ')} is {profile[field]}."
+                        print("🔔 Drift reminder injected:", reminder) 
+
+                        # ——— determine the new_topic phrase ———
+                        if field == "topics_on_mind":
+                            # look for “about X” or “think about X”
+                            m = re.search(r"\b(?:about|think about)\s+([\w\s]+)", user_text)
+                            new_topic = m.group(1).strip() if m else next(kw for kw in keywords if kw in user_text)
+                        else:
+                            # for other fields, just use the matched keyword
+                            new_topic = next(kw for kw in keywords if kw in user_text)
+
+                        # ——— persist it if new ———
+                        old_topics = profile.get("topics_on_mind") or []
+                        if field == "topics_on_mind" and new_topic and new_topic not in old_topics:
+                            updated_topics = old_topics + [new_topic]
+                            self.supabase_sync.table("user_profiles") \
+                                .update({"topics_on_mind": updated_topics}) \
+                                .eq("user_id", patient_id) \
+                                .execute()
+                            print(f"💾 Added topic_on_mind '{new_topic}' to user_profiles")
+
+                        print("🔔 Drift reminder injected:", reminder)
+                        messages.append({"role": "system", "content": reminder})
+                        self._reminded_fields[conv_id].add(field)
 
         return messages
 
