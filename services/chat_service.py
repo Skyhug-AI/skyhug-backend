@@ -7,7 +7,6 @@ from openai import OpenAI
 from realtime import RealtimeSubscribeStates
 from collections import defaultdict
 from dataclasses import field
-
 from supabase import Client
 from supabase._async.client import AsyncClient
 from repositories.messages import MessageRepository
@@ -91,10 +90,21 @@ class ChatService:
             .eq("id", conv_id) \
             .single() \
             .execute()
-        patient_id = row.data.get("patient_id") if row.data else None
-        print(f"🛠️ DEBUG fetched patient_id={patient_id}")
-
         patient_id = (row.data or {}).get("patient_id")
+
+        profile = {}
+        if patient_id:
+            profile = self.user_profile_repo.fetch_profile(patient_id) or {}
+
+        # ─── build mini-profile text ────────────────────────────────────────────
+        mini = None
+        if profile:
+            mini = (
+                f"Profile: {profile.get('age','?')}-year-old {profile.get('gender','')}, "
+                f"{profile.get('career','Unknown')} who struggles with {profile.get('self_diagnosed_issues','none')}. "
+                f"Often thinks about {', '.join(profile.get('topics_on_mind',[]))}."
+            )
+
 
         if patient_id and conv_id not in self._profile_injected_sessions:
             profile = self.user_profile_repo.fetch_profile(patient_id)
@@ -117,8 +127,14 @@ class ChatService:
                 print("🔍 [debug] profile injected for session", conv_id)
                 self._profile_injected_sessions.add(conv_id)
 
+        # ─── 4a) inject mini profile AGAIN every 5 turns  ────────────────────────────
         # 5) build initial messages
         messages: list[dict] = [{"role": "system", "content": system_prompt}] + SKY_EXAMPLE_DIALOG
+
+        if mini:
+            messages.append({"role": "system", "content": mini})
+        messages.append({"role": "system", "content": system_prompt})
+        messages.extend(SKY_EXAMPLE_DIALOG)
 
         # 5a) if brand‐new but memory exists, inject a “last time we talked about…” message
         if memory and not history:
