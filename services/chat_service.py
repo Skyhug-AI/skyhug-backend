@@ -83,6 +83,21 @@ class ChatService:
             )
         else:
             system_prompt = DEFAULT_SYSTEM_PROMPT
+        
+        identity = trow.get("identity", {})               # e.g. {"orientation":"gay","gender":"female"}
+        if identity:
+            # build a little “identity details” string
+            id_parts = [f"{k.replace('_',' ')}: {v}" for k,v in identity.items()]
+            id_details = "; ".join(id_parts)
+            # tack it onto your chosen system_prompt
+            system_prompt += (
+                "\n\n"
+                f"Identity details: {id_details}.\n"
+                "Please only reference these aspects of your identity when they "
+                "help you empathize or illustrate a point—e.g. when discussing LGBTQ+ "
+                "topics, coming-out, relationship dynamics, or identity stress. "
+                "Otherwise, focus on the user’s concerns."
+            )
 
         # ─── 4a) inject profile ONCE at session start ────────────────────────────
         row = self.supabase_sync.table("conversations") \
