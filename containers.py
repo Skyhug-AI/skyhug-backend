@@ -49,6 +49,11 @@ class Container(containers.DeclarativeContainer):
         supabase_sync_client=supabase_sync
     )
 
+    user_profile_repository = providers.Factory(
+        UserProfileRepository,
+        supabase_sync_client=supabase_sync,
+    )
+
     # External API clients
     openai_client = providers.Singleton(
         OpenAI,
@@ -96,7 +101,7 @@ class Container(containers.DeclarativeContainer):
         message_repo=message_repository,
         conversation_repo=conversation_repository,
         therapist_repo=therapist_repository,
-        user_profile_repo=UserProfileRepository(sync_client),
+        user_profile_repo=UserProfileRepository(user_profile_repository),
     )
 
     whisper_service = providers.Factory(
